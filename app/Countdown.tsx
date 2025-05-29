@@ -30,7 +30,7 @@ export function Countdown({ config }: { config: Config }) {
       salaryDate = new Date(year, month, inputDay, 9, 0, 0, 0);
     }
     // If salary date is Sat/Sun, move to previous Friday
-    let weekday = salaryDate.getDay();
+    const weekday = salaryDate.getDay();
     if (weekday === 6) salaryDate.setDate(salaryDate.getDate() - 1); // Saturday -> Friday
     if (weekday === 0) salaryDate.setDate(salaryDate.getDate() - 2); // Sunday -> Friday
     return salaryDate;
@@ -80,7 +80,7 @@ export function Countdown({ config }: { config: Config }) {
   }, [now, salaryDate, showFirework, fireworkStart, day]);
 
   const diff = salaryDate.getTime() - now.getTime();
-  const isPast = diff <= 0;
+  // const isPast = diff <= 0; // no longer used
   const absDiff = Math.abs(diff);
   const days = Math.floor(absDiff / (1000 * 60 * 60 * 24));
   const hours = Math.floor((absDiff / (1000 * 60 * 60)) % 24);
