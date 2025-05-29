@@ -7,28 +7,94 @@ interface Config {
 }
 
 export function Countdown({ config }: { config: Config }) {
-  const targetDate = new Date(config.countdownTo);
+  // Helper: get the correct salary date for the current or next month
+  function getSalaryDate(now: Date, day: number): Date {
+    // Clamp day to 1-31
+    let inputDay = Math.max(1, Math.min(31, day));
+    // Get year/month
+    let year = now.getFullYear();
+    let month = now.getMonth();
+    // Get last day of this month
+    let lastDay = new Date(year, month + 1, 0).getDate();
+    if (inputDay > lastDay) inputDay = lastDay;
+    let salaryDate = new Date(year, month, inputDay, 9, 0, 0, 0); // 9:00 AM
+    // If salary date already passed, move to next month
+    if (salaryDate < now) {
+      month += 1;
+      if (month > 11) {
+        month = 0;
+        year += 1;
+      }
+      lastDay = new Date(year, month + 1, 0).getDate();
+      if (inputDay > lastDay) inputDay = lastDay;
+      salaryDate = new Date(year, month, inputDay, 9, 0, 0, 0);
+    }
+    // If salary date is Sat/Sun, move to previous Friday
+    let weekday = salaryDate.getDay();
+    if (weekday === 6) salaryDate.setDate(salaryDate.getDate() - 1); // Saturday -> Friday
+    if (weekday === 0) salaryDate.setDate(salaryDate.getDate() - 2); // Sunday -> Friday
+    return salaryDate;
+  }
+
+  // Parse config.countdownTo as a day (1-31)
+  let day = 1;
+  try {
+    const d = new Date(config.countdownTo);
+    if (!isNaN(d.getDate())) day = d.getDate();
+    // If config.countdownTo is a number string, use it
+    if (/^\d{1,2}$/.test(config.countdownTo)) day = parseInt(config.countdownTo, 10);
+  } catch {}
+
   const [now, setNow] = useState(new Date());
   const [showFirework, setShowFirework] = useState(false);
+  const [fireworkStart, setFireworkStart] = useState<Date | null>(null);
+  const [salaryDate, setSalaryDate] = useState(() => getSalaryDate(new Date(), day));
+
+  // Update salary date if month changes
+  useEffect(() => {
+    setSalaryDate(getSalaryDate(now, day));
+  }, [now, day]);
 
   useEffect(() => {
-    if (now >= targetDate) {
-      setShowFirework(true);
-      return;
-    }
     const timer = setInterval(() => {
       setNow(new Date());
     }, 1000);
     return () => clearInterval(timer);
-  }, [now, targetDate]);
+  }, []);
 
-  const diff = targetDate.getTime() - now.getTime();
+  useEffect(() => {
+    const diff = salaryDate.getTime() - now.getTime();
+    if (diff <= 0 && !showFirework) {
+      setShowFirework(true);
+      setFireworkStart(new Date());
+    }
+    if (showFirework && fireworkStart) {
+      // After 5 minutes, reset to next month
+      const elapsed = now.getTime() - fireworkStart.getTime();
+      if (elapsed >= 5 * 60 * 1000) {
+        setShowFirework(false);
+        setFireworkStart(null);
+        setSalaryDate(getSalaryDate(new Date(salaryDate.getFullYear(), salaryDate.getMonth() + 1, 1), day));
+      }
+    }
+  }, [now, salaryDate, showFirework, fireworkStart, day]);
+
+  const diff = salaryDate.getTime() - now.getTime();
   const isPast = diff <= 0;
   const absDiff = Math.abs(diff);
   const days = Math.floor(absDiff / (1000 * 60 * 60 * 24));
   const hours = Math.floor((absDiff / (1000 * 60 * 60)) % 24);
   const minutes = Math.floor((absDiff / (1000 * 60)) % 60);
   const seconds = Math.floor((absDiff / 1000) % 60);
+
+  // Format date as dd/mm/yyyy
+  const formatDate = (date: Date) =>
+    `${date.getDate().toString().padStart(2, "0")}/${(date.getMonth() + 1)
+      .toString()
+      .padStart(2, "0")}/${date.getFullYear()}`;
+
+  // If day is 0, hide the countdown/time field
+  const hideCountdown = day === 0;
 
   return (
     <div
@@ -39,16 +105,26 @@ export function Countdown({ config }: { config: Config }) {
       }}
     >
       <h1 className="text-4xl font-bold mb-6">Remaining time</h1>
-      <div className="text-2xl mb-2">
-        {targetDate.toLocaleDateString()} {targetDate.toLocaleTimeString()}
-      </div>
-      <div className="text-6xl font-mono mb-4">
-        {isPast
-          ? "00:00:00"
-          : `${days}d ${hours.toString().padStart(2, "0")}:${minutes
-              .toString()
-              .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`}
-      </div>
+      {!hideCountdown && (
+        <>
+          <div className="text-2xl mb-2">
+            {formatDate(salaryDate)} {salaryDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            {" "}
+            <span className="text-lg font-semibold">(
+              {salaryDate.toLocaleDateString(undefined, { weekday: "long" })}
+            )</span>
+          </div>
+          <div className="text-6xl font-mono mb-4">
+            {days > 0
+              ? `${days}d ${hours.toString().padStart(2, "0")}:${minutes
+                  .toString()
+                  .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+              : `${hours.toString().padStart(2, "0")}:${minutes
+                  .toString()
+                  .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`}
+          </div>
+        </>
+      )}
       <div className="text-xl mb-8">{config.message}</div>
       {showFirework && <FireworkAnimation />}
     </div>
